@@ -1,112 +1,88 @@
+import express from "express";
 import fs from 'fs';
 
-const todos = JSON.parse(fs.readFileSync("./todos.json", 'utf8'));
+const app = express();
 
-const argvArr = [...process.argv];
-argvArr.splice(0, 2);
+app.use(express.json());
 
-const keysArr = ['id', 'title', 'description', 'isCompleted'];
+const readFile = (path) => {
+    return JSON.parse(fs.readFileSync(path, "utf8"));
+};
 
-const findTodoById = (index) => {
-    let ret = false;
-    for (let i = 0; i < todos.length && !ret; i++) {
-        if (todos[i].id === index) {
-            ret = todos[i];
-        }
-        // todos.forEach(todo 
+const writeFunc = (err) => {
+    // Checking for errors
+    if (err) throw err;
+};
+
+const writeToFileSingleObject = (path, obj) => {
+    const fileArray = readFile(path);
+    fileArray.push(obj);
+    fs.writeFile(path, JSON.stringify(fileArray), writeFunc);
+    console.log("Done writing single object"); // Success
+    return fileArray
+};
+
+const writeToFileArray = (path, arr) => {
+    fs.writeFile(path, JSON.stringify(arr), writeFunc);
+    console.log("Done writing array"); // Success
+};
+
+
+const deleteFromFile = (path, id) => {
+    const fileArray = readFile(path);
+    const itemToBeDeletedIndex = fileArray.findIndex((item) => item.id === +id);
+    const clone = [...fileArray];
+    clone.splice(itemToBeDeletedIndex, 1);
+    writeToFileArray(path, clone);
+    return clone;
+};
+
+const updateFile = (path, id, updatedObj) => {
+    const fileArray = readFile(path);
+    const itemToBeUpdated = fileArray.findIndex(item => item.id === +id);
+    const clone = [...fileArray];
+    for (const key in updatedObj) {
+        clone[itemToBeUpdated][key] = updatedObj[key];
     }
-    return ret;
+    writeToFileArray(path, clone);
+    return clone;
 }
 
-const writeToFile = () => {
-    fs.writeFile("todos.json", JSON.stringify(todos), err => {
-        // Checking for errors 
-        if (err) throw err;
-        console.log("Done writing"); // Success 
-    });
-}
+/***************************************************************************************************/
 
-const deleteTodo = (args) => {
-    console.log("enter update")
-    const ind = parseInt(args[0]);
-    let todo = findTodoById(ind);
-    const todoIndex = todos.findIndex(element => element === todo);
-    todos.splice(todoIndex, 1);
-    writeToFile();
-}
+app.get("/", (req, res) => res.send(readFile("./todos.json")));
 
-const updateTodo = (args) => {
-    console.log("enter update")
-    const ind = parseInt(args[0]);
-    let todo = findTodoById(ind);
-    if (!todo) {
-        console.log(`todo with id ${ind} doesn't exist`)
-        return;
+app.get("/todo/:id", (req, res) => {
+    const fileArray = readFile("./todos.json");
+    const id = req.params.id;
+    const desiredTodo = fileArray.find(todo => todo.id===parseInt(id));
+    console.log(desiredTodo);
+    res.send(desiredTodo);
+})
+
+app.post("/", (req, res)=>{
+    const obj = {...req.body};
+    console.log("obj", obj);
+    if(Object.keys(obj).length === 0 ){
+        res.send("failed");
     }
-    for (let i = 1; i < args.length; i++) {
-        switch (args[i]) {
-            case "title":
-                todo["title"] = args[i + 1];
-                i++;
-                break;
-            case "description":
-                todo["description"] = args[i + 1];
-                i++;
-                break;
-            case "isCompleted":
-                todo["description"] = args[i + 1] === true;
-                i++;
-                break;
-            default:
-        }
-    }
-    writeToFile();
-}
+    const answer = writeToFileSingleObject("./todos.json", obj);
+    res.send(answer);
+})
 
-const addTodo = (args) => {
-    console.log("args", args)
-    let todo = {};
-    const ind = parseInt(args[0]);
-    if (findTodoById(ind)) {
-        console.log(`id ${ind} already exist, the todo won't be added to the todos list`)
-        return;
-    }
-    argvArr.forEach((arg, index) => {
-        switch (index) {
-            case 0:
-                todo[keysArr[index]] = parseInt(arg);
-                break;
-            case 1:
-            case 2:
-                todo[keysArr[index]] = arg;
-                break;
-            case 3:
-                todo[keysArr[index]] = (arg === true);
-        }
-    })
-    todos.push(todo);
-    writeToFile();
-}
+app.put("/todo/:id", (req, res) => {
+    const id = req.params.id;
+    const obj = {...req.body};
+    const answer = updateFile("./todos.json", id, obj);
+    res.send(answer);
+})
 
-switch (argvArr[0]) {
-    case "add":
-        argvArr.splice(0, 1);
-        addTodo(argvArr)
-        break;
-    case "update":
-        argvArr.splice(0, 1);
-        updateTodo(argvArr)
-        break;
-    case "delete":
-        argvArr.splice(0, 1);
-        deleteTodo(argvArr);
-        break;
-    default:
-        console.log(`Help:
-        The first argument should be one of add/update/delete/read/print
-        - add <id (integer)> <title (string)> <description(string)> <isCompleted (boolean)>
-        - update <id> [title <new title>] [description <new description>] [isCompleted <true | false>]
-        - delete  id <id>
-        `)
+app.delete("/todo/:id", (req, res) => {
+    const id = req.params.id;
+    const answer = deleteFromFile("./todos.json", id);
+    res.send(answer)
+})
 
-}
+app.listen(8001, () => {
+    console.log("Example app listening on port 8001!");
+});
